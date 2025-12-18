@@ -108,34 +108,36 @@ exports.getBestBooks = (req, res) => {
 exports.rateBook = (req, res) => {
   Book.findOne({ _id: req.params.id })
     .then((book) => {
+      if (!book) {
+        return res.status(404).json({ message: 'Livre non trouvé' });
+      }
+
       const alreadyRated = book.ratings.find(
         (rating) => rating.userId === req.auth.userId
       );
 
-      if (!alreadyRated && req.body.rating >= 0 && req.body.rating <= 5) {
-        book.ratings.push({
-          userId: req.auth.userId,
-          grade: req.body.rating,
-        });
-
-        const total = book.ratings.reduce(
-          (sum, rating) => sum + rating.grade,
-          0
-        );
-
-        const averageRating = Math.round(total / book.ratings.length);
-
-        Book.updateOne(
-          { _id: req.params.id },
-          {
-            ratings: book.ratings,
-            averageRating: averageRating,
-          }
-        )
-          .then(() => res.status(200).json({ message: 'Note ajoutée' }))
-          .catch((err) => res.status(401).json({ err }));
+      if (alreadyRated) {
+        return res.status(400).json({ message: 'Livre déjà noté' });
       }
-      res.status(200).json(book);
+
+      if (req.body.rating < 0 || req.body.rating > 5) {
+        return res.status(400).json({ message: 'Note invalide' });
+      }
+
+      book.ratings.push({
+        userId: req.auth.userId,
+        grade: req.body.rating,
+      });
+
+      const total = book.ratings.reduce(
+        (sum, rating) => sum + rating.grade,
+        0
+      );
+
+      book.averageRating = Math.round(total / book.ratings.length);
+
+      return book.save()
+        .then((updatedBook) => res.status(200).json(updatedBook));
     })
-    .catch((err) => res.status(400).json({ err }));
+    .catch((err) => res.status(500).json({ err }));
 };
